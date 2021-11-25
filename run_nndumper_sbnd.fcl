@@ -1,0 +1,42 @@
+#
+# service configuration
+#
+
+#include "services_sbnd.fcl"
+#include "messages_sbnd.fcl"
+#include "sam_sbnd.fcl"
+#include "larfft_sbnd.fcl"
+#include "signalservices_sbnd.fcl"
+#include "rootoutput_sbnd.fcl"
+
+process_name: NNDumper
+
+services:
+{
+  TFileService: { fileName: "NNDumper_tree.root" }
+}
+
+source:
+{
+  module_type: RootInput
+  maxEvents: -1        # Number of events to create
+}
+
+
+physics:
+{
+    analyzers:
+    {
+        nndumper: { module_type: NNDumper }
+    }
+
+    ana: [ nndumper ]
+    end_paths: [ana]
+}
+
+physics.analyzers.nndumper.HitProducer: "gaushit"
+# Readout window is 400 ticks front porch + 2600 ticks drift window + 400 ticks back porch
+physics.analyzers.nndumper.TPCReadoutWindowSize: 3400 
+physics.analyzers.nndumper.TPCWireNumbers: [1984, 1984, 1664]
+physics.analyzers.nndumper.TPCDownsampleTicks: 34
+physics.analyzers.nndumper.TPCDownsampleWires: 8
