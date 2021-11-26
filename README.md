@@ -19,3 +19,5 @@ For each event, the analyzer currently dumps:
 
 We only consider photons detected by the TPB coated PMTs, sensible to VUV(direct) and Visible(reflected by cathode in the middle of the volume) photons.
 For the Optical System Image, as SBND has 2 different volumes/optical&charge planes, in the current approach, we add opposing optical channels.
+
+![Alt text](images/sbnd_tpc.png?raw=true "Title")
