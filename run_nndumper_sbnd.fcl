@@ -35,8 +35,19 @@ physics:
 }
 
 physics.analyzers.nndumper.HitProducer: "gaushit"
+physics.analyzers.nndumper.OpHitProducer: "ophitpmt"
+physics.analyzers.nndumper.MCTruthProducer: "generator"
+# physics.analyzers.nndumper.Debug: true #uncomment this line to go debug mode
+
+# TPC Image (electrons/charge) settings
 # Readout window is 400 ticks front porch + 2600 ticks drift window + 400 ticks back porch
 physics.analyzers.nndumper.TPCReadoutWindowSize: 3400 
 physics.analyzers.nndumper.TPCWireNumbers: [1984, 1984, 1664]
 physics.analyzers.nndumper.TPCDownsampleTicks: 34
 physics.analyzers.nndumper.TPCDownsampleWires: 8
+
+# Optical Image (photons) settings
+physics.analyzers.nndumper.OptReadoutWindowSize: 12000 #in nano seconds 
+physics.analyzers.nndumper.OptReadoutSampling: 2 #in nano seconds 
+physics.analyzers.nndumper.OptDownSample: 10 #PMT sample is 2ns/tick-> 12000/2=6000 ticks, using factor 10 of downsample to aim for 600 time-bins
+physics.analyzers.nndumper.OptChannelBins: 48 # 96/2 coated PMT channels 
