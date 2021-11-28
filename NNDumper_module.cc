@@ -77,8 +77,8 @@ private:
   std::string fMCTruthProducer; // Module label that created the hits
 
   TTree* fOutTree; // Output tree
-  opdet::sbndPDMapAlg pdsMap;  //Optical channels map
-  bool fDebug;
+
+  bool fDebug; // Debug flag
 
   //----Charge Hits
   float fTPCReadoutWindowSize; // Number of samples in TPC readout window
@@ -101,21 +101,22 @@ private:
   uint fTPCImgHeightY; // TPC image height
 
   //----OpHits
-  float fOptReadoutWindowSize;
+  float fOptReadoutWindowLength;
   float fOptReadoutSampling;
-  float fOptDownSample;
+  float fOptDownsampleTicks;
   float fOptChannelBins;
   TH2F* fhDisplayOpHit; // Optical hit position
   std::vector<float> fOpImgData; // Optical image data
   uint fOpImgWidth; //  Optical image width
   uint fOpImgHeight; // Optical image height
+  opdet::sbndPDMapAlg pdsMap; // Optical channels map
   std::vector<int> fOpChannels = pdsMap.getChannelsOfType("pmt_coated");
 
   //----MCTruth (interaction info)
   int fInteractionType;
 
-  //----SimPhotons 
-  int NChannels=fOpChannels.size();
+  //----SimPhotons
+  int NChannels = fOpChannels.size();
   std::vector<int> fSimPhotons=std::vector<int>(NChannels); //vector of zeros for the channels
 };
 
@@ -132,9 +133,9 @@ NNDumper::NNDumper(fhicl::ParameterSet const& p)
   fTPCDownsampleTicks = p.get<float>("TPCDownsampleTicks");
   fTPCDownsampleWires = p.get<float>("TPCDownsampleWires");
   fDebug = p.get<bool>("Debug",false);
-  fOptReadoutWindowSize=p.get<float>("OptReadoutWindowSize");
+  fOptReadoutWindowLength=p.get<float>("OptReadoutWindowLength");
   fOptReadoutSampling=p.get<float>("OptReadoutSampling");
-  fOptDownSample=p.get<float>("OptDownSample");
+  fOptDownsampleTicks=p.get<float>("OptDownsampleTicks");
   fOptChannelBins=p.get<float>("OptChannelBins");
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
@@ -148,8 +149,7 @@ void NNDumper::analyze(art::Event const& e)
   art::InputTag hit_tag { fHitProducer };
   auto const& hit_handle = e.getValidHandle< std::vector<recob::Hit> >(hit_tag);
 
-  for( auto const& hit : *hit_handle )
-  {
+  for( auto const& hit : *hit_handle ) {
     unsigned int wire = hit.WireID().Wire;
     float tick = hit.PeakTime();
     float integral = hit.Integral();
@@ -170,64 +170,61 @@ void NNDumper::analyze(art::Event const& e)
   //*** Process Optical information ***
   art::Handle<std::vector<recob::OpHit>> ophits_h;
   e.getByLabel(fOpHitProducer.c_str(), ophits_h);
-    for(auto const& oph : *ophits_h)
-    {
-      auto ch            = oph.OpChannel();
-      auto peak_time_abs = oph.PeakTimeAbs();
-      // peak_time     = oph.PeakTime();
-      // width         = oph.Width();
-      // area          = oph.Area();
-      // amplitude     = oph.Amplitude();
-      auto PE            = oph.PE();
-      
+  for(auto const& oph : *ophits_h){
+    auto ch            = oph.OpChannel();
+    auto peak_time_abs = oph.PeakTimeAbs();
+    // peak_time     = oph.PeakTime();
+    // width         = oph.Width();
+    // area          = oph.Area();
+    // amplitude     = oph.Amplitude();
+    auto PE            = oph.PE();
 
-      if (pdsMap.pdType(ch)=="pmt_coated"){
-        //Get index of vector
-        std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
-        int index = std::distance(fOpChannels.begin(), it);
-        
-        //colapse both tpc optical planes, sum channels in front of each other-> 6+7,.. 60+61,....
-        fhDisplayOpHit->Fill(index/2,peak_time_abs,PE);
-      }
+    if(pdsMap.pdType(ch) == "pmt_coated"){
+      // Get index of vector
+      std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
+      int index = std::distance(fOpChannels.begin(), it);
+      // Colapse both optical planes, sum channels in front of each other -> 6+7, ..., 60+61,....
+      fhDisplayOpHit->Fill( index/2, peak_time_abs, PE );
     }
+  }
 
   extractImage(fhDisplayOpHit, fOpImgData);
 
   //*** Process Interaction(MCTruth) information ***
   art::Handle<std::vector<simb::MCTruth> > mctruths;
-  e.getByLabel(fMCTruthProducer.c_str(), mctruths); 
-  for (auto const& truth : *mctruths)
-  {
-    const simb::MCNeutrino& nu  = truth.GetNeutrino ();
-    fInteractionType       = nu.InteractionType ();
+  e.getByLabel(fMCTruthProducer.c_str(), mctruths);
+  for (auto const& truth : *mctruths){
+    const simb::MCNeutrino& nu = truth.GetNeutrino();
+    fInteractionType = nu.InteractionType();
   }
 
   //*** Process Truth photons on optical channels (SimPhotons) information ***
   std::vector<art::Handle<std::vector<sim::SimPhotonsLite>>> fPhotonLiteHandles;
   fPhotonLiteHandles.clear();
   fPhotonLiteHandles = e.getMany<std::vector<sim::SimPhotonsLite>>();
+  // JICA: why not remove the 3 lines above and use simply
+  //  auto const& photon_handles = e.getMany<std::vector<sim::SimPhotonsLite>>();
   const std::vector<art::Handle<std::vector<sim::SimPhotonsLite>>> &photon_handles = fPhotonLiteHandles;
   for (const art::Handle<std::vector<sim::SimPhotonsLite>> &opdetHandle : photon_handles) {
     // this now tells you if light collection is reflected
     // const bool Reflected = (opdetHandle.provenance()->productInstanceName() == "Reflected");
 
-    for (auto const& litesimphotons : (*opdetHandle))
-    {
+    for (auto const& litesimphotons : (*opdetHandle)){
       const unsigned ch = litesimphotons.OpChannel;
       const std::string pdtype = pdsMap.pdType(ch);
       std::map<int, int> const& photonMap = litesimphotons.DetectedPhotons;
 
-      for (auto const& photonMember : photonMap)
-      {
-        auto meanPhotons = photonMember.second;
-        // auto tphoton = photonMember.first;//maybe in future work!
+      for (auto const& photonMember : photonMap){
+	// JICA: is it a mean value? like average? if not, rename variable
+	auto meanPhotons = photonMember.second;
+	// auto tphoton = photonMember.first;//maybe in future work!
 
-        if((pdtype == "pmt_coated"))
-        {
-          std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
-          int index = std::distance(fOpChannels.begin(), it);
-          fSimPhotons[index]+=meanPhotons;
-        }
+	// JICA: why this if block is insde the for loop when pdtype is set out of the loop?
+	if(pdtype == "pmt_coated"){
+	  std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
+	  int index = std::distance(fOpChannels.begin(), it);
+	  fSimPhotons[index] += meanPhotons;
+	}
       }
     }
   }
@@ -247,21 +244,22 @@ void NNDumper::beginJob()
   // histograms and n-tuples for us.
   art::ServiceHandle<art::TFileService> tfs;
 
-  // Use the ROOT TH2 to create and downsample the TPC "image"
+  // Use the ROOT TH2 to create and downsample the "images"
 
   // To do: store 3 plane information as elements of vector
-  fhDisplayHitU = new TH2F("hDisplayHitU","Plane U Evt. hit pos.; Wire; Tick; Entries", 
-			   int(fTPCWireNumbers[0]/fTPCDownsampleWires), 0., fTPCWireNumbers[0], 
+  fhDisplayHitU = new TH2F("hDisplayHitU","Plane U Evt. hit pos.; Wire; Tick; Charge",
+			   int(fTPCWireNumbers[0]/fTPCDownsampleWires), 0., fTPCWireNumbers[0],
 			   int(2*fTPCReadoutWindowSize/fTPCDownsampleTicks), -fTPCReadoutWindowSize, fTPCReadoutWindowSize);
-  fhDisplayHitV = new TH2F("hDisplayHitV","Plane V Evt. hit pos.; Wire; Tick; Entries",
-			   int(fTPCWireNumbers[1]/fTPCDownsampleWires), 0., fTPCWireNumbers[1], 
+  fhDisplayHitV = new TH2F("hDisplayHitV","Plane V Evt. hit pos.; Wire; Tick; Charge",
+			   int(fTPCWireNumbers[1]/fTPCDownsampleWires), 0., fTPCWireNumbers[1],
 			   int(2*fTPCReadoutWindowSize/fTPCDownsampleTicks), -fTPCReadoutWindowSize, fTPCReadoutWindowSize);
-  fhDisplayHitY = new TH2F("hDisplayHitY","Plane Y Evt. hit pos.; Wire; Tick; Entries",
-			   int(fTPCWireNumbers[2]/fTPCDownsampleWires), 0., fTPCWireNumbers[2], 
+  fhDisplayHitY = new TH2F("hDisplayHitY","Plane Y Evt. hit pos.; Wire; Tick; Charge",
+			   int(fTPCWireNumbers[2]/fTPCDownsampleWires), 0., fTPCWireNumbers[2],
 			   int(2*fTPCReadoutWindowSize/fTPCDownsampleTicks), -fTPCReadoutWindowSize, fTPCReadoutWindowSize);
-  fhDisplayOpHit= new TH2F("hDisplayOpHit","Evt. Opticalhit pos.; Channel; Tick; Entries",
-			   fOptChannelBins, -0.5, fOptChannelBins+0.5, 
-			   int(fOptReadoutWindowSize/(fOptReadoutSampling*fOptDownSample)), 0, fOptReadoutWindowSize/1000);
+
+  fhDisplayOpHit = new TH2F("hDisplayOpHit","Evt. OpHit pos.; Channel; Time (#mus); PEs",
+			    fOptChannelBins, 0., fOptChannelBins,
+			    int(fOptReadoutWindowLength/(fOptReadoutSampling*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
 
   // Output tree
   fOutTree = tfs->make<TTree>("evttree","NNDumper output tree");
@@ -279,7 +277,7 @@ void NNDumper::beginJob()
   fOutTree->Branch("OpImgData", "std::vector<float>", &fOpImgData);
   fOutTree->Branch("OpImgWidth", &fOpImgWidth, "OpImgWidth/I");
   fOutTree->Branch("OpImgHeight", &fOpImgHeight, "OpImgHeight/I");
-  
+
   fOutTree->Branch("InteractionType", &fInteractionType, "InteractionType/I");
 
   fOutTree->Branch("SimPhotonsData", "std::vector<int>", &fSimPhotons);
