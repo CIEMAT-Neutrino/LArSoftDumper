@@ -101,23 +101,28 @@ private:
   uint fTPCImgHeightY; // TPC image height
 
   //----OpHits
-  float fOptReadoutWindowLength;
-  float fOptReadoutSampling;
-  float fOptDownsampleTicks;
-  float fOptChannelBins;
-  TH2F* fhDisplayOpHit; // Optical hit position
-  std::vector<float> fOpImgData; // Optical image data
+  float fOptReadoutWindowLength; // Length of PDS readout window in ns
+  float fOptReadoutSample; // Sample size in ns
+  float fOptDownsampleTicks; // Downsample factor for optical ticks
+  float fOptChannelBins; // Number of optical channels
+  TH2F* fhDisplayOpHit0; // Optical hit position in TPC 0
+  TH2F* fhDisplayOpHit1; // Optical hit position in TPC 1
+  std::vector<float> fOpImgData0; // Optical image data in TPC 0
+  std::vector<float> fOpImgData1; // Optical image data in TPC 1
   uint fOpImgWidth; //  Optical image width
   uint fOpImgHeight; // Optical image height
   opdet::sbndPDMapAlg pdsMap; // Optical channels map
-  std::vector<int> fOpChannels = pdsMap.getChannelsOfType("pmt_coated");
+  // To do: get from fcl file
+  std::vector<int> fOpChannels = pdsMap.getChannelsOfType("pmt_coated"); // List of selected optical channels
 
   //----MCTruth (interaction info)
   int fInteractionType;
 
   //----SimPhotons
   int NChannels = fOpChannels.size();
-  std::vector<int> fSimPhotons=std::vector<int>(NChannels); //vector of zeros for the channels
+  std::vector<int> fSimPhotons = std::vector<int>(NChannels); //vector of zeros for the channels
+  // JICA: why not remove the two lines above and use the simpler version
+  //std::vector<int> fSimPhotons(fOpChannels.size(), 0);
 };
 
 
@@ -133,10 +138,10 @@ NNDumper::NNDumper(fhicl::ParameterSet const& p)
   fTPCDownsampleTicks = p.get<float>("TPCDownsampleTicks");
   fTPCDownsampleWires = p.get<float>("TPCDownsampleWires");
   fDebug = p.get<bool>("Debug",false);
-  fOptReadoutWindowLength=p.get<float>("OptReadoutWindowLength");
-  fOptReadoutSampling=p.get<float>("OptReadoutSampling");
-  fOptDownsampleTicks=p.get<float>("OptDownsampleTicks");
-  fOptChannelBins=p.get<float>("OptChannelBins");
+  fOptReadoutWindowLength = p.get<float>("OptReadoutWindowLength");
+  fOptReadoutSample = p.get<float>("OptReadoutSample");
+  fOptDownsampleTicks = p.get<float>("OptDownsampleTicks");
+  fOptChannelBins = p.get<float>("OptChannelBins");
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
 
@@ -183,12 +188,14 @@ void NNDumper::analyze(art::Event const& e)
       // Get index of vector
       std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
       int index = std::distance(fOpChannels.begin(), it);
-      // Colapse both optical planes, sum channels in front of each other -> 6+7, ..., 60+61,....
-      fhDisplayOpHit->Fill( index/2, peak_time_abs, PE );
+      // SBND specific: even channels belong to TPC 0, odd channels to TPC 1
+      if( ch%2 == 0 ) fhDisplayOpHit0->Fill( index/2, peak_time_abs, PE );
+      else fhDisplayOpHit1->Fill( index/2, peak_time_abs, PE );
     }
   }
 
-  extractImage(fhDisplayOpHit, fOpImgData);
+  extractImage(fhDisplayOpHit0, fOpImgData0);
+  extractImage(fhDisplayOpHit1, fOpImgData1);
 
   //*** Process Interaction(MCTruth) information ***
   art::Handle<std::vector<simb::MCTruth> > mctruths;
@@ -233,7 +240,8 @@ void NNDumper::analyze(art::Event const& e)
   resetImage(fhDisplayHitU, fTPCImgDataU);
   resetImage(fhDisplayHitV, fTPCImgDataV);
   resetImage(fhDisplayHitY, fTPCImgDataY);
-  resetImage(fhDisplayOpHit, fOpImgData);
+  resetImage(fhDisplayOpHit0, fOpImgData0);
+  resetImage(fhDisplayOpHit1, fOpImgData1);
   std::fill(fSimPhotons.begin(), fSimPhotons.end(), 0);//reset simphotons vector
 }
 
@@ -257,13 +265,17 @@ void NNDumper::beginJob()
 			   int(fTPCWireNumbers[2]/fTPCDownsampleWires), 0., fTPCWireNumbers[2],
 			   int(2*fTPCReadoutWindowSize/fTPCDownsampleTicks), -fTPCReadoutWindowSize, fTPCReadoutWindowSize);
 
-  fhDisplayOpHit = new TH2F("hDisplayOpHit","Evt. OpHit pos.; Channel; Time (#mus); PEs",
+  // To do: store 2 optical plane information as elements of vector
+  fhDisplayOpHit0 = new TH2F("hDisplayOpHit0","TPC 0 Evt. OpHit pos.; Channel; Time (#mus); PEs",
 			    fOptChannelBins, 0., fOptChannelBins,
-			    int(fOptReadoutWindowLength/(fOptReadoutSampling*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
+			    int(fOptReadoutWindowLength/(fOptReadoutSample*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
+  fhDisplayOpHit1 = new TH2F("hDisplayOpHit1","TPC 1 Evt. OpHit pos.; Channel; Time (#mus); PEs",
+			    fOptChannelBins, 0., fOptChannelBins,
+			    int(fOptReadoutWindowLength/(fOptReadoutSample*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
 
   // Output tree
   fOutTree = tfs->make<TTree>("evttree","NNDumper output tree");
-  // To do: store 3 plane information as elements of vector after checking we can unpack them later
+  // To do: store 3 TPC plane information as elements of vector after checking we can unpack them later
   fOutTree->Branch("TPCImgDataU", "std::vector<float>", &fTPCImgDataU);
   fOutTree->Branch("TPCImgWidthU", &fTPCImgWidthU, "TPCImgWidthU/I");
   fOutTree->Branch("TPCImgHeightU", &fTPCImgHeightU, "TPCImgHeightU/I");
@@ -273,8 +285,9 @@ void NNDumper::beginJob()
   fOutTree->Branch("TPCImgDataY", "std::vector<float>", &fTPCImgDataY);
   fOutTree->Branch("TPCImgWidthY", &fTPCImgWidthY, "TPCImgWidthY/I");
   fOutTree->Branch("TPCImgHeightY", &fTPCImgHeightY, "TPCImgHeightY/I");
-
-  fOutTree->Branch("OpImgData", "std::vector<float>", &fOpImgData);
+  // To do: store 2 optical plane information as elements of vector after checking we can unpack them later
+  fOutTree->Branch("OpImgData0", "std::vector<float>", &fOpImgData0);
+  fOutTree->Branch("OpImgData1", "std::vector<float>", &fOpImgData1);
   fOutTree->Branch("OpImgWidth", &fOpImgWidth, "OpImgWidth/I");
   fOutTree->Branch("OpImgHeight", &fOpImgHeight, "OpImgHeight/I");
 
@@ -294,10 +307,11 @@ void NNDumper::beginJob()
   fTPCImgHeightY = fhDisplayHitY->GetNbinsY();
   fTPCImgDataY.resize(fTPCImgWidthY*fTPCImgHeightY, 0); // fill with zeroes
 
-  fOpImgWidth = fhDisplayOpHit->GetNbinsX();
-  fOpImgHeight = fhDisplayOpHit->GetNbinsY();
-  fOpImgData.resize(fOpImgWidth*fOpImgHeight, 0); // fill with zeroes
-
+  fOpImgWidth = fhDisplayOpHit0->GetNbinsX();
+  fOpImgHeight = fhDisplayOpHit0->GetNbinsY();
+  fOpImgData0.resize(fOpImgWidth*fOpImgHeight, 0); // fill with zeroes
+  // Must have the same size as above
+  fOpImgData1.resize(fOpImgWidth*fOpImgHeight, 0); // fill with zeroes
 }
 
 void NNDumper::endJob()
@@ -306,7 +320,8 @@ void NNDumper::endJob()
   delete fhDisplayHitU;
   delete fhDisplayHitV;
   delete fhDisplayHitY;
-  delete fhDisplayOpHit;
+  delete fhDisplayOpHit0;
+  delete fhDisplayOpHit1;
 }
 
 void NNDumper::extractImage(TH2F* h2, std::vector<float>& img)

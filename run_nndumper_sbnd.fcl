@@ -48,6 +48,6 @@ physics.analyzers.nndumper.TPCDownsampleWires: 8
 
 # Optical Image (photons) settings
 physics.analyzers.nndumper.OptReadoutWindowLength: 12000 # in nanoseconds
-physics.analyzers.nndumper.OptReadoutSampling: 2 # in nanoseconds
+physics.analyzers.nndumper.OptReadoutSample: 2 # in nanoseconds
 physics.analyzers.nndumper.OptDownsampleTicks: 10 # PMT sample is 2 ns/tick-> 12000/2 = 6000 ticks, using factor 10 gives 600 time-bins
 physics.analyzers.nndumper.OptChannelBins: 48 # 96/2 coated PMT channels
