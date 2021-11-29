@@ -120,7 +120,7 @@ private:
 
   //----SimPhotons
   int NChannels = fOpChannels.size();
-  std::vector<int> fSimPhotons = std::vector<int>(NChannels); //vector of zeros for the channels
+  std::vector<int> fSimPhotons; //vector of zeros for the channels
   // JICA: why not remove the two lines above and use the simpler version
   //std::vector<int> fSimPhotons(fOpChannels.size(), 0);
 };
@@ -244,7 +244,7 @@ void NNDumper::beginJob()
   // Access ART's TFileService, which will handle creating and writing
   // histograms and n-tuples for us.
   art::ServiceHandle<art::TFileService> tfs;
-
+  fSimPhotons = std::vector<int>(NChannels);
   // Use the ROOT TH2 to create and downsample the "images"
 
   // To do: store 3 plane information as elements of vector
