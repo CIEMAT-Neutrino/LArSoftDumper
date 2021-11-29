@@ -101,10 +101,10 @@ private:
   uint fTPCImgHeightY; // TPC image height
 
   //----OpHits
-  float fOptReadoutWindowLength; // Length of PDS readout window in ns
-  float fOptReadoutSample; // Sample size in ns
-  float fOptDownsampleTicks; // Downsample factor for optical ticks
-  float fOptChannelBins; // Number of optical channels
+  float fOpReadoutWindowLength; // Length of PDS readout window in ns
+  float fOpReadoutSample; // Sample size in ns
+  float fOpDownsampleTicks; // Downsample factor for optical ticks
+  float fOpChannelBins; // Number of optical channels
   TH2F* fhDisplayOpHit0; // Optical hit position in TPC 0
   TH2F* fhDisplayOpHit1; // Optical hit position in TPC 1
   std::vector<float> fOpImgData0; // Optical image data in TPC 0
@@ -138,10 +138,10 @@ NNDumper::NNDumper(fhicl::ParameterSet const& p)
   fTPCDownsampleTicks = p.get<float>("TPCDownsampleTicks");
   fTPCDownsampleWires = p.get<float>("TPCDownsampleWires");
   fDebug = p.get<bool>("Debug",false);
-  fOptReadoutWindowLength = p.get<float>("OptReadoutWindowLength");
-  fOptReadoutSample = p.get<float>("OptReadoutSample");
-  fOptDownsampleTicks = p.get<float>("OptDownsampleTicks");
-  fOptChannelBins = p.get<float>("OptChannelBins");
+  fOpReadoutWindowLength = p.get<float>("OpReadoutWindowLength");
+  fOpReadoutSample = p.get<float>("OpReadoutSample");
+  fOpDownsampleTicks = p.get<float>("OpDownsampleTicks");
+  fOpChannelBins = p.get<float>("OpChannelBins");
   // Call appropriate consumes<>() for any products to be retrieved by this module.
 }
 
@@ -206,12 +206,7 @@ void NNDumper::analyze(art::Event const& e)
   }
 
   //*** Process Truth photons on optical channels (SimPhotons) information ***
-  std::vector<art::Handle<std::vector<sim::SimPhotonsLite>>> fPhotonLiteHandles;
-  fPhotonLiteHandles.clear();
-  fPhotonLiteHandles = e.getMany<std::vector<sim::SimPhotonsLite>>();
-  // JICA: why not remove the 3 lines above and use simply
-  //  auto const& photon_handles = e.getMany<std::vector<sim::SimPhotonsLite>>();
-  const std::vector<art::Handle<std::vector<sim::SimPhotonsLite>>> &photon_handles = fPhotonLiteHandles;
+  auto const& photon_handles = e.getMany<std::vector<sim::SimPhotonsLite>>();
   for (const art::Handle<std::vector<sim::SimPhotonsLite>> &opdetHandle : photon_handles) {
     // this now tells you if light collection is reflected
     // const bool Reflected = (opdetHandle.provenance()->productInstanceName() == "Reflected");
@@ -220,18 +215,16 @@ void NNDumper::analyze(art::Event const& e)
       const unsigned ch = litesimphotons.OpChannel;
       const std::string pdtype = pdsMap.pdType(ch);
       std::map<int, int> const& photonMap = litesimphotons.DetectedPhotons;
+    
+      if(pdtype == "pmt_coated"){
 
-      for (auto const& photonMember : photonMap){
-	// JICA: is it a mean value? like average? if not, rename variable
-	auto meanPhotons = photonMember.second;
-	// auto tphoton = photonMember.first;//maybe in future work!
-
-	// JICA: why this if block is insde the for loop when pdtype is set out of the loop?
-	if(pdtype == "pmt_coated"){
-	  std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
-	  int index = std::distance(fOpChannels.begin(), it);
-	  fSimPhotons[index] += meanPhotons;
-	}
+        for (auto const& photonMember : photonMap){
+          auto NPhotons = photonMember.second;
+          // auto tphoton = photonMember.first;//maybe in future work!
+          std::vector<int>::iterator it = std::find(fOpChannels.begin(), fOpChannels.end(), ch);
+          int index = std::distance(fOpChannels.begin(), it);
+          fSimPhotons[index] += NPhotons;
+        }
       }
     }
   }
@@ -267,11 +260,11 @@ void NNDumper::beginJob()
 
   // To do: store 2 optical plane information as elements of vector
   fhDisplayOpHit0 = new TH2F("hDisplayOpHit0","TPC 0 Evt. OpHit pos.; Channel; Time (#mus); PEs",
-			    fOptChannelBins, 0., fOptChannelBins,
-			    int(fOptReadoutWindowLength/(fOptReadoutSample*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
+			    fOpChannelBins, 0., fOpChannelBins,
+			    int(fOpReadoutWindowLength/(fOpReadoutSample*fOpDownsampleTicks)), 0., fOpReadoutWindowLength/1000.); // in mus
   fhDisplayOpHit1 = new TH2F("hDisplayOpHit1","TPC 1 Evt. OpHit pos.; Channel; Time (#mus); PEs",
-			    fOptChannelBins, 0., fOptChannelBins,
-			    int(fOptReadoutWindowLength/(fOptReadoutSample*fOptDownsampleTicks)), 0., fOptReadoutWindowLength/1000.); // in mus
+			    fOpChannelBins, 0., fOpChannelBins,
+			    int(fOpReadoutWindowLength/(fOpReadoutSample*fOpDownsampleTicks)), 0., fOpReadoutWindowLength/1000.); // in mus
 
   // Output tree
   fOutTree = tfs->make<TTree>("evttree","NNDumper output tree");
